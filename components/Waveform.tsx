@@ -1,6 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { SrtLine } from '../types';
 import { msToSrtTime, srtTimeToMs } from './Header';
+
+export interface WaveformHandle {
+    updatePlayhead: (time: number) => void;
+}
 
 interface WaveformProps {
     audioBuffer: AudioBuffer;
@@ -46,45 +50,51 @@ const formatTimelineTime = (timeInSeconds: number) => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
-export const Waveform: React.FC<WaveformProps> = ({ audioBuffer, currentTime, duration, onSeek, srtLines, activeSrtLineId, zoom, onZoomChange }) => {
+export const Waveform = forwardRef<WaveformHandle, WaveformProps>(({ audioBuffer, currentTime, duration, onSeek, srtLines, activeSrtLineId, zoom, onZoomChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const mainCanvasRef = useRef<HTMLCanvasElement>(null);
     const playheadCanvasRef = useRef<HTMLCanvasElement>(null);
-    
+
     const [peakData, setPeakData] = useState<Float32Array | null>(null);
     const [hoverTime, setHoverTime] = useState<number | null>(null);
 
+    // Store canvas dimensions for playhead drawing without needing full redraw
+    const canvasDimsRef = useRef({ canvasWidth: 0, dpr: 1 });
+
     useEffect(() => {
-        const resolution = 4000; 
+        const resolution = 4000;
         const data = processAudioBuffer(audioBuffer, resolution);
         setPeakData(data);
     }, [audioBuffer]);
 
-    const draw = useCallback(() => {
+    // Draw static content: timeline, waveform, SRT highlights
+    const drawStatic = useCallback(() => {
         const mainCanvas = mainCanvasRef.current;
         const playheadCanvas = playheadCanvasRef.current;
         const container = containerRef.current;
         if (!mainCanvas || !playheadCanvas || !container || !peakData || duration === 0) return;
 
         const ctx = mainCanvas.getContext('2d');
-        const playheadCtx = playheadCanvas.getContext('2d');
-        if (!ctx || !playheadCtx) return;
-        
+        if (!ctx) return;
+
         const dpr = window.devicePixelRatio || 1;
         const displayWidth = container.clientWidth;
         const canvasWidth = displayWidth * zoom;
-        
+
+        // Store dimensions for playhead updates
+        canvasDimsRef.current = { canvasWidth, dpr };
+
         mainCanvas.width = canvasWidth * dpr;
         mainCanvas.height = TOTAL_HEIGHT * dpr;
         mainCanvas.style.width = `${canvasWidth}px`;
         mainCanvas.style.height = `${TOTAL_HEIGHT}px`;
         ctx.scale(dpr, dpr);
 
+        // Also resize playhead canvas to match
         playheadCanvas.width = canvasWidth * dpr;
         playheadCanvas.height = TOTAL_HEIGHT * dpr;
         playheadCanvas.style.width = `${canvasWidth}px`;
         playheadCanvas.style.height = `${TOTAL_HEIGHT}px`;
-        playheadCtx.scale(dpr, dpr);
 
         ctx.clearRect(0, 0, canvasWidth, TOTAL_HEIGHT);
 
@@ -103,7 +113,7 @@ export const Waveform: React.FC<WaveformProps> = ({ audioBuffer, currentTime, du
             ctx.fillText(formatTimelineTime(i), x + 3, TIMELINE_HEIGHT - 2);
         }
 
-        // 2. Draw Waveform (Draw this FIRST so highlights go on top)
+        // 2. Draw Waveform
         ctx.fillStyle = '#6B7280';
         const halfHeight = WAVEFORM_HEIGHT / 2;
         const peakDataResolution = peakData.length / 2;
@@ -113,15 +123,15 @@ export const Waveform: React.FC<WaveformProps> = ({ audioBuffer, currentTime, du
             const peakIndex = Math.floor(i * step) * 2;
             const min = peakData[peakIndex];
             const max = peakData[peakIndex + 1];
-            
+
             const y1 = (1 + min) * halfHeight;
             const y2 = (1 + max) * halfHeight;
             const height = Math.max(1, y2 - y1);
-            
+
             ctx.fillRect(i, TIMELINE_HEIGHT + y1, 1, height);
         }
 
-        // 3. Draw Highlights (Draw ON TOP of waveform with transparency)
+        // 3. Draw Highlights
         srtLines.forEach(line => {
             const startTime = srtTimeToMs(line.startTime) / 1000;
             const endTime = srtTimeToMs(line.endTime) / 1000;
@@ -129,43 +139,66 @@ export const Waveform: React.FC<WaveformProps> = ({ audioBuffer, currentTime, du
             const width = (endTime - startTime) * pixelsPerSecond;
 
             if (line.id === activeSrtLineId) {
-                // Active: Yellow with higher opacity and border
                 ctx.fillStyle = 'rgba(250, 204, 21, 0.4)';
                 ctx.fillRect(x, TIMELINE_HEIGHT, width, WAVEFORM_HEIGHT);
-                
-                // Add border for active region
                 ctx.strokeStyle = 'rgba(250, 204, 21, 0.8)';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x, TIMELINE_HEIGHT, width, WAVEFORM_HEIGHT);
             } else {
-                // Inactive: Blue with low opacity
                 ctx.fillStyle = 'rgba(99, 102, 241, 0.2)';
                 ctx.fillRect(x, TIMELINE_HEIGHT, width, WAVEFORM_HEIGHT);
             }
         });
 
+    }, [peakData, duration, zoom, srtLines, activeSrtLineId]);
+
+    // Lightweight playhead-only draw — called directly from rAF in AudioPlayer
+    const updatePlayhead = useCallback((time: number) => {
+        const playheadCanvas = playheadCanvasRef.current;
+        const container = containerRef.current;
+        if (!playheadCanvas || !container || duration === 0) return;
+
+        const { canvasWidth, dpr } = canvasDimsRef.current;
+        if (canvasWidth === 0) return;
+
+        const playheadCtx = playheadCanvas.getContext('2d');
+        if (!playheadCtx) return;
+
+        playheadCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         playheadCtx.clearRect(0, 0, canvasWidth, TOTAL_HEIGHT);
-        const playheadX = (currentTime / duration) * canvasWidth;
+        const playheadX = (time / duration) * canvasWidth;
         playheadCtx.fillStyle = 'rgba(239, 68, 68, 0.9)';
         playheadCtx.fillRect(playheadX, 0, 1.5, TOTAL_HEIGHT);
-        
+
+        // Auto-scroll
         const scrollLeft = container.scrollLeft;
         const clientWidth = container.clientWidth;
         const buffer = 50;
         if (playheadX < scrollLeft + buffer || playheadX > scrollLeft + clientWidth - buffer) {
-             container.scrollLeft = playheadX - clientWidth / 2;
+            container.scrollLeft = playheadX - clientWidth / 2;
         }
+    }, [duration]);
 
-    }, [peakData, duration, zoom, srtLines, activeSrtLineId, currentTime]);
+    // Expose updatePlayhead to parent via ref
+    useImperativeHandle(ref, () => ({
+        updatePlayhead,
+    }), [updatePlayhead]);
 
+    // Draw static content when dependencies change
     useEffect(() => {
-        draw();
+        drawStatic();
+        // Also draw playhead at current position after static redraw
+        updatePlayhead(currentTime);
+
         const container = containerRef.current;
         if (!container) return;
-        const resizeObserver = new ResizeObserver(draw);
+        const resizeObserver = new ResizeObserver(() => {
+            drawStatic();
+            updatePlayhead(currentTime);
+        });
         resizeObserver.observe(container);
         return () => resizeObserver.disconnect();
-    }, [draw]);
+    }, [drawStatic, updatePlayhead, currentTime]);
 
     const handleWheel = (e: React.WheelEvent) => {
         e.preventDefault();
@@ -228,4 +261,4 @@ export const Waveform: React.FC<WaveformProps> = ({ audioBuffer, currentTime, du
             )}
         </div>
     );
-};
+});

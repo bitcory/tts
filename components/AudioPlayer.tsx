@@ -3,7 +3,7 @@ import { DownloadIcon, ScissorsIcon, PlayIcon, PauseIcon, RefreshIcon, PlusIcon,
 import { AudioHistoryItem } from '../App';
 import { SrtLine } from '../types';
 import { srtTimeToMs } from './Header';
-import { Waveform } from './Waveform';
+import { Waveform, WaveformHandle } from './Waveform';
 
 interface AudioPlayerProps {
     item: AudioHistoryItem;
@@ -56,6 +56,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
     item, index, isLoading, onTrim, onRegenerateSrt,
     srtLines, activeSrtLineId, setActiveSrtLineId
 }, ref) => {
+    const waveformRef = useRef<WaveformHandle>(null);
     const sourceRef = useRef<AudioBufferSourceNode | null>(null);
     const gainRef = useRef<GainNode | null>(null);
     // When playback started (in AudioContext time)
@@ -167,7 +168,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         return () => { stopSource(); };
     }, [stopSource]);
 
-    // Smooth time update via rAF
+    // Smooth time update via rAF — update playhead canvas directly (no React state delay)
     useEffect(() => {
         let animId: number;
         const update = () => {
@@ -175,6 +176,11 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
                 const ctx = getAudioContext();
                 const elapsed = (ctx.currentTime - ctxStartTimeRef.current) * (sourceRef.current.playbackRate.value);
                 const now = Math.min(startOffsetRef.current + elapsed, duration);
+
+                // Update playhead canvas directly — bypasses React render pipeline
+                waveformRef.current?.updatePlayhead(now);
+
+                // Update React state at lower priority (for seekbar/time labels)
                 setCurrentTime(now);
 
                 const activeLine = srtLinesWithSeconds.find(
@@ -307,6 +313,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
 
             {item.audioBuffer && (
                  <Waveform
+                    ref={waveformRef}
                     audioBuffer={item.audioBuffer}
                     currentTime={currentTime}
                     duration={duration}
