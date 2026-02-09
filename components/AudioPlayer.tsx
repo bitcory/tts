@@ -205,39 +205,39 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
     };
 
     return (
-        <div className="bg-white/5 backdrop-blur-xl p-4 rounded-lg border border-white/10 space-y-3">
-            <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-white">
-                    생성된 오디오 클립 #{index + 1}
+        <div className="bg-white/5 backdrop-blur-xl p-3 sm:p-4 rounded-lg border border-white/10 space-y-2 sm:space-y-3">
+            <div className="flex justify-between items-center gap-2">
+                <h3 className="text-sm sm:text-lg font-bold text-white whitespace-nowrap shrink-0">
+                    클립 #{index + 1}
                 </h3>
-                <div className="flex items-center gap-2">
-                    <button 
-                        onClick={onRegenerateSrt} 
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                    <button
+                        onClick={onRegenerateSrt}
                         disabled={isLoading}
-                        className="flex items-center gap-2 bg-yellow-600 text-white font-semibold py-2 px-3 rounded-md hover:bg-yellow-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors text-sm"
-                        title="현재 오디오를 기준으로 자막을 다시 생성합니다."
+                        className="flex items-center gap-1.5 bg-yellow-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-yellow-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors text-xs sm:text-sm"
+                        title="자막 재생성"
                     >
-                        <RefreshIcon className="w-4 h-4" />
-                        <span>자막 재생성</span>
+                        <RefreshIcon className="w-4 h-4 shrink-0" />
+                        <span className="hidden sm:inline">자막 재생성</span>
                     </button>
                     {item.contextDuration > 0 && !item.isTrimmed && (
-                        <button onClick={onTrim} className="flex items-center gap-2 bg-cyan-600 text-white font-semibold py-2 px-3 rounded-md hover:bg-cyan-700 transition-colors text-sm">
-                            <ScissorsIcon className="w-4 h-4" />
-                            <span>앞부분 잘라내기</span>
+                        <button onClick={onTrim} className="flex items-center gap-1.5 bg-cyan-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-cyan-700 transition-colors text-xs sm:text-sm">
+                            <ScissorsIcon className="w-4 h-4 shrink-0" />
+                            <span className="hidden sm:inline">앞부분 잘라내기</span>
                         </button>
                     )}
-                    <button onClick={handleDownload} className="flex items-center gap-2 bg-green-600 text-white font-semibold py-2 px-3 rounded-md hover:bg-green-700 transition-colors text-sm">
-                        <DownloadIcon className="w-4 h-4" />
-                        <span>오디오 다운로드</span>
+                    <button onClick={handleDownload} className="flex items-center gap-1.5 bg-green-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-green-700 transition-colors text-xs sm:text-sm">
+                        <DownloadIcon className="w-4 h-4 shrink-0" />
+                        <span className="hidden sm:inline">다운로드</span>
                     </button>
                 </div>
             </div>
 
-            <div className="flex items-center gap-4">
-                <button onClick={togglePlayPause} className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700">
+            <div className="flex items-center gap-2 sm:gap-4">
+                <button onClick={togglePlayPause} className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 shrink-0">
                     {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
                 </button>
-                <div className="w-28 text-center font-mono text-sm text-gray-300">
+                <div className="hidden sm:block w-28 text-center font-mono text-sm text-gray-300 shrink-0">
                     {formatTime(currentTime)} / {formatTime(duration)}
                 </div>
                 <input
@@ -247,9 +247,9 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
                     step="0.01"
                     value={currentTime}
                     onChange={(e) => handleSeek(Number(e.target.value))}
-                    className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                    className="w-full min-w-0 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer"
                 />
-                 <div className="flex items-center gap-1">
+                <div className="hidden sm:flex items-center gap-1 shrink-0">
                     <button onClick={() => setZoom(z => Math.max(1, z / 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15" aria-label="파형 축소"><MinusIcon className="w-4 h-4" /></button>
                     <button onClick={() => setZoom(z => Math.min(100, z * 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15" aria-label="파형 확대"><PlusIcon className="w-4 h-4" /></button>
                 </div>

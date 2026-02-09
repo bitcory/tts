@@ -120,13 +120,13 @@ const ScriptEditor: React.FC<ScriptEditorProps> = ({
                     </h3>
                 </div>
                 <div className="flex items-center gap-2 relative">
-                    <button 
+                    <button
                         onClick={() => setIsAutoFormatOpen(!isAutoFormatOpen)}
-                        className="px-3 py-1.5 text-xs font-semibold text-gray-300 hover:text-white bg-white/10 hover:bg-white/15 rounded-md transition-colors flex items-center gap-1.5"
+                        className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-gray-300 hover:text-white bg-white/10 hover:bg-white/15 rounded-md transition-colors flex items-center gap-1.5"
                         title="자동 줄바꿈 설정"
                     >
                         <WrapTextIcon className="w-3.5 h-3.5" />
-                        자동 줄바꿈 설정
+                        <span className="hidden sm:inline">자동 줄바꿈 설정</span>
                     </button>
                     {isAutoFormatOpen && (
                         <div className="absolute top-full right-0 mt-2 w-48 bg-gray-900/90 backdrop-blur-2xl border border-white/10 rounded-lg shadow-xl z-20 p-3">
@@ -475,17 +475,15 @@ export const MainContent: React.FC<MainContentProps> = ({
     
     // Calculate height for responsiveness (viewport height - header/padding approx)
     // Adjust this value if header size changes
-    const contentHeightStyle = { height: 'calc(100vh - 220px)' };
-
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" style={contentHeightStyle}>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start min-h-0 h-auto lg:h-[calc(100vh-220px)]">
             <div className="h-full lg:col-span-12">
                 {/* 2-Column Layout for Input and Results */}
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 h-full">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 h-full">
                     {/* LEFT COLUMN: Voice Settings + Script Editor */}
                     <div className="flex flex-col gap-4 h-full min-h-0">
                         {/* Voice Selection & Controls Block */}
-                        <div className="bg-white/5 backdrop-blur-xl p-4 rounded-lg shadow border border-white/10 flex flex-col gap-4 shrink-0">
+                        <div className="bg-white/5 backdrop-blur-xl p-3 sm:p-4 rounded-lg shadow border border-white/10 flex flex-col gap-3 sm:gap-4 shrink-0">
                             <div className="flex flex-col gap-2">
                                 <label className="text-sm font-medium text-gray-300">음성 선택</label>
                                 <div className="flex gap-2">
@@ -636,41 +634,41 @@ export const MainContent: React.FC<MainContentProps> = ({
                             </div>
                         ) : srtContent && (
                             <div className="flex-grow bg-white/5 backdrop-blur-xl rounded-lg shadow-inner flex flex-col min-h-0 border border-white/10">
-                                <div className="flex-shrink-0 flex justify-between items-center p-3 border-b border-white/10">
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => setSrtMode('chapter')} className={`px-4 py-1.5 text-sm font-semibold rounded-md flex items-center gap-2 ${srtMode === 'chapter' ? 'bg-indigo-600 text-white' : 'bg-white/5 hover:bg-white/10 text-gray-300'}`}>
-                                            <ListBulletIcon className="w-5 h-5" /> 챕터
+                                <div className="flex-shrink-0 flex justify-between items-center p-2 sm:p-3 border-b border-white/10 gap-2">
+                                    <div className="flex items-center gap-1.5 sm:gap-2">
+                                        <button onClick={() => setSrtMode('chapter')} className={`px-2.5 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold rounded-md flex items-center gap-1.5 sm:gap-2 ${srtMode === 'chapter' ? 'bg-indigo-600 text-white' : 'bg-white/5 hover:bg-white/10 text-gray-300'}`}>
+                                            <ListBulletIcon className="w-4 h-4 sm:w-5 sm:h-5" /> 챕터
                                         </button>
-                                        <button onClick={() => setSrtMode('edit')} className={`px-4 py-1.5 text-sm font-semibold rounded-md flex items-center gap-2 ${srtMode === 'edit' ? 'bg-indigo-600 text-white' : 'bg-white/5 hover:bg-white/10 text-gray-300'}`}>
-                                            <PencilIcon className="w-5 h-5" /> 수정
+                                        <button onClick={() => setSrtMode('edit')} className={`px-2.5 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold rounded-md flex items-center gap-1.5 sm:gap-2 ${srtMode === 'edit' ? 'bg-indigo-600 text-white' : 'bg-white/5 hover:bg-white/10 text-gray-300'}`}>
+                                            <PencilIcon className="w-4 h-4 sm:w-5 sm:h-5" /> 수정
                                         </button>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <label className="flex items-center text-sm text-gray-300 cursor-pointer">
+                                    <div className="flex items-center gap-1.5 sm:gap-4">
+                                        <label className="hidden sm:flex items-center text-sm text-gray-300 cursor-pointer">
                                             <input type="checkbox" checked={isAutoScrollEnabled} onChange={(e) => setIsAutoScrollEnabled(e.target.checked)} className="mr-2 bg-gray-700 border-gray-600 rounded text-indigo-500 focus:ring-indigo-600"/>
                                             자동 스크롤
                                         </label>
-                                        <button onClick={handleCopySrt} title="SRT 복사" className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-md"><ClipboardIcon className="w-5 h-5" /></button>
-                                        <button onClick={handleDownloadSrt} title="SRT 다운로드" className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-md"><DownloadIcon className="w-5 h-5" /></button>
+                                        <button onClick={handleCopySrt} title="SRT 복사" className="p-1.5 sm:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-md"><ClipboardIcon className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+                                        <button onClick={handleDownloadSrt} title="SRT 다운로드" className="p-1.5 sm:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-md"><DownloadIcon className="w-4 h-4 sm:w-5 sm:h-5" /></button>
                                     </div>
                                 </div>
 
                                 {srtMode === 'edit' && (
-                                    <div className="flex-shrink-0 p-3 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                                    <div className="flex-shrink-0 p-2 sm:p-3 bg-white/5 border-b border-white/10 flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm text-gray-300">타임코드 동기화:</p>
-                                            <button onClick={() => setIsTimestampSyncEnabled(!isTimestampSyncEnabled)} className={`px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1.5 ${isTimestampSyncEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'}`}>
+                                            <p className="text-xs sm:text-sm text-gray-300 hidden sm:block">동기화:</p>
+                                            <button onClick={() => setIsTimestampSyncEnabled(!isTimestampSyncEnabled)} className={`px-2 sm:px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1 sm:gap-1.5 ${isTimestampSyncEnabled ? 'bg-green-600 text-white' : 'bg-gray-600 text-gray-300'}`}>
                                                 <LinkIcon className="w-3 h-3" /> {isTimestampSyncEnabled ? '활성' : '비활성'}
                                             </button>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => handleTimeShiftApply(-100)} className="px-2 py-1 text-xs bg-white/10 rounded-md hover:bg-white/15">-100ms</button>
-                                            <button onClick={() => handleTimeShiftApply(100)} className="px-2 py-1 text-xs bg-white/10 rounded-md hover:bg-white/15">+100ms</button>
-                                            <button onClick={onResetSrt} disabled={!hasTimestampEdits && JSON.stringify(editableSrtLines) === JSON.stringify(originalSrtLines)} className="text-sm flex items-center gap-1.5 text-yellow-400 hover:text-yellow-300 disabled:text-gray-500 disabled:cursor-not-allowed">
-                                                <RefreshIcon className="w-4 h-4" /> 되돌리기
+                                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                                            <button onClick={() => handleTimeShiftApply(-100)} className="px-1.5 sm:px-2 py-1 text-xs bg-white/10 rounded-md hover:bg-white/15">-100ms</button>
+                                            <button onClick={() => handleTimeShiftApply(100)} className="px-1.5 sm:px-2 py-1 text-xs bg-white/10 rounded-md hover:bg-white/15">+100ms</button>
+                                            <button onClick={onResetSrt} disabled={!hasTimestampEdits && JSON.stringify(editableSrtLines) === JSON.stringify(originalSrtLines)} className="text-xs sm:text-sm flex items-center gap-1 sm:gap-1.5 text-yellow-400 hover:text-yellow-300 disabled:text-gray-500 disabled:cursor-not-allowed">
+                                                <RefreshIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">되돌리기</span><span className="sm:hidden">리셋</span>
                                             </button>
-                                            <button onClick={onReconstructAudio} disabled={hasTimestampEdits || JSON.stringify(editableSrtLines) === JSON.stringify(originalSrtLines)} className="text-sm flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 disabled:text-gray-500 disabled:cursor-not-allowed">
-                                                <ScissorsIcon className="w-4 h-4" /> 오디오 재구성
+                                            <button onClick={onReconstructAudio} disabled={hasTimestampEdits || JSON.stringify(editableSrtLines) === JSON.stringify(originalSrtLines)} className="text-xs sm:text-sm flex items-center gap-1 sm:gap-1.5 text-cyan-400 hover:text-cyan-300 disabled:text-gray-500 disabled:cursor-not-allowed">
+                                                <ScissorsIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">오디오 재구성</span><span className="sm:hidden">재구성</span>
                                             </button>
                                         </div>
                                     </div>

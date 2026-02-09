@@ -811,7 +811,7 @@ export function App() {
                 </div>
             )}
 
-            <div className="max-w-[1800px] mx-auto p-4 lg:p-6 space-y-6 pb-4">
+            <div className="max-w-[1800px] mx-auto px-2 py-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6 pb-4">
                 <header className="relative w-full pb-4 pt-2">
                     <div className="absolute top-4 right-0 hidden md:flex items-center gap-2">
                         <button
@@ -824,7 +824,7 @@ export function App() {
                     </div>
 
                     <div className="flex flex-col xl:flex-row items-center justify-center gap-4 xl:gap-6 pt-2">
-                        <h1 className="text-3xl font-extrabold tracking-tight text-white whitespace-nowrap">
+                        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white whitespace-nowrap">
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400">TB TTS STUDIO</span>
                         </h1>
 
