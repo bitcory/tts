@@ -43,18 +43,20 @@ const formatTimeShort = (timeInSeconds: number) => {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
-export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({ 
+export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
     item, index, isLoading, onTrim, onRegenerateSrt,
     srtLines, activeSrtLineId, setActiveSrtLineId
 }, ref) => {
     const audioRef = useRef<HTMLAudioElement>(null);
-    const hasPlayedRef = useRef(false);
+    const isLoadedRef = useRef(false);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
     const [zoom, setZoom] = useState(1);
     const [playbackRate, setPlaybackRate] = useState(1);
-    
+
+    // Duration from AudioBuffer (reliable, no need to wait for audio element load)
+    const duration = item.audioBuffer ? item.audioBuffer.duration : 0;
+
     const srtLinesWithSeconds = useMemo(() => {
         return srtLines.map(line => ({
             ...line,
@@ -63,39 +65,35 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         }));
     }, [srtLines]);
 
-    const safePlay = (audio: HTMLAudioElement) => {
-        const doPlay = () => {
-            audio.play().catch(e => console.error("Audio play failed", e));
-        };
-
-        if (!hasPlayedRef.current) {
-            // First play: fully reload to guarantee playback starts from 0.
-            // load() resets position to 0 and re-buffers the entire source.
-            hasPlayedRef.current = true;
-            audio.addEventListener('canplaythrough', doPlay, { once: true });
-            audio.load();
-            return;
-        }
-
-        if (audio.readyState >= 4) {
-            doPlay();
+    // Ensure audio element is loaded, then call callback
+    const ensureLoaded = (audio: HTMLAudioElement, callback: () => void) => {
+        if (isLoadedRef.current && audio.readyState >= 4) {
+            callback();
         } else {
-            audio.addEventListener('canplaythrough', doPlay, { once: true });
-            if (audio.readyState < 1) {
-                audio.load();
-            }
+            audio.addEventListener('canplaythrough', () => {
+                isLoadedRef.current = true;
+                callback();
+            }, { once: true });
+            audio.load();
         }
     };
 
     useImperativeHandle(ref, () => ({
         seekTo: (time: number) => {
             if (audioRef.current) {
-                audioRef.current.currentTime = time;
-                setCurrentTime(time);
+                ensureLoaded(audioRef.current, () => {
+                    audioRef.current!.currentTime = time;
+                    setCurrentTime(time);
+                });
             }
         },
         play: () => {
-            if (audioRef.current) safePlay(audioRef.current);
+            if (audioRef.current) {
+                const audio = audioRef.current;
+                ensureLoaded(audio, () => {
+                    audio.play().catch(e => console.error("Audio play failed", e));
+                });
+            }
         },
         pause: () => {
             if (audioRef.current) {
@@ -105,7 +103,10 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         togglePlay: () => {
             if (audioRef.current) {
                 if (audioRef.current.paused) {
-                    safePlay(audioRef.current);
+                    const audio = audioRef.current;
+                    ensureLoaded(audio, () => {
+                        audio.play().catch(e => console.error("Audio play failed", e));
+                    });
                 } else {
                     audioRef.current.pause();
                 }
@@ -113,16 +114,11 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         }
     }));
 
-    // Force the browser to fully load the audio data on mount and reset position
+    // Reset state when audio source changes (do NOT auto-load)
     useEffect(() => {
-        const audio = audioRef.current;
-        if (audio) {
-            hasPlayedRef.current = false;
-            audio.load();
-            audio.currentTime = 0;
-            setCurrentTime(0);
-            setIsPlaying(false);
-        }
+        isLoadedRef.current = false;
+        setCurrentTime(0);
+        setIsPlaying(false);
     }, [item.src]);
 
     // Smooth playback update using requestAnimationFrame
@@ -133,7 +129,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
             if (audioRef.current && !audioRef.current.paused) {
                 const now = audioRef.current.currentTime;
                 setCurrentTime(now);
-                
+
                 const activeLine = srtLinesWithSeconds.find(
                     line => now >= line.startTimeSec && now < line.endTimeSec
                 );
@@ -156,11 +152,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         const audio = audioRef.current;
         if (!audio) return;
 
-        const setAudioData = () => {
-            setDuration(audio.duration);
-            setCurrentTime(audio.currentTime);
-        };
-
         const handleEnd = () => {
             setIsPlaying(false);
             setActiveSrtLineId(null);
@@ -170,29 +161,25 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
 
         const handlePlay = () => setIsPlaying(true);
         const handlePause = () => setIsPlaying(false);
-        
-        // We still keep timeupdate as a fallback and for initial sync, 
-        // but the main smooth loop is handled by the useEffect above.
+
         const handleTimeUpdate = () => {
             if (!isPlaying) {
                  setCurrentTime(audio.currentTime);
             }
         };
 
-        audio.addEventListener('loadeddata', setAudioData);
         audio.addEventListener('ended', handleEnd);
         audio.addEventListener('play', handlePlay);
         audio.addEventListener('pause', handlePause);
         audio.addEventListener('timeupdate', handleTimeUpdate);
 
         return () => {
-            audio.removeEventListener('loadeddata', setAudioData);
             audio.removeEventListener('ended', handleEnd);
             audio.removeEventListener('play', handlePlay);
             audio.removeEventListener('pause', handlePause);
             audio.removeEventListener('timeupdate', handleTimeUpdate);
         };
-    }, [isPlaying, setActiveSrtLineId]); // Dependencies simplified as logic moved to rAF loop
+    }, [isPlaying, setActiveSrtLineId]);
 
     const handleDownload = () => {
         const link = document.createElement('a');
@@ -210,15 +197,20 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         if (isPlaying) {
             audio.pause();
         } else {
-            safePlay(audio);
+            ensureLoaded(audio, () => {
+                audio.playbackRate = playbackRate;
+                audio.play().catch(e => console.error("Audio play failed", e));
+            });
         }
     };
 
     const handleSeek = (time: number) => {
-        if (audioRef.current) {
-            audioRef.current.currentTime = time;
+        const audio = audioRef.current;
+        if (!audio) return;
+        ensureLoaded(audio, () => {
+            audio.currentTime = time;
             setCurrentTime(time);
-        }
+        });
     };
 
     const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -305,7 +297,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
                     <button onClick={() => setZoom(z => Math.max(1, z / 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15 transition-colors" aria-label="파형 축소"><MinusIcon className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setZoom(z => Math.min(100, z * 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15 transition-colors" aria-label="파형 확대"><PlusIcon className="w-3.5 h-3.5" /></button>
                 </div>
-                <audio ref={audioRef} src={item.src} preload="auto"></audio>
+                <audio ref={audioRef} src={item.src} preload="none"></audio>
             </div>
 
             {/* Speed Controls */}
