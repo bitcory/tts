@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
-import { DownloadIcon, ScissorsIcon, PlayIcon, PauseIcon, RefreshIcon, PlusIcon, MinusIcon } from '../constants';
+import { DownloadIcon, ScissorsIcon, PlayIcon, PauseIcon, RefreshIcon, PlusIcon, MinusIcon, SkipBackIcon, SkipForwardIcon } from '../constants';
 import { AudioHistoryItem } from '../App';
 import { SrtLine } from '../types';
 import { parseSrt, srtTimeToMs } from './Header';
@@ -34,6 +34,13 @@ const formatTime = (timeInSeconds: number) => {
     const milliseconds = Math.floor((timeInSeconds * 1000) % 1000);
 
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
+};
+
+const formatTimeShort = (timeInSeconds: number) => {
+    if (isNaN(timeInSeconds) || timeInSeconds < 0) return '0:00';
+    const minutes = Math.floor(timeInSeconds / 60);
+    const seconds = Math.floor(timeInSeconds % 60);
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
 export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({ 
@@ -204,8 +211,16 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         }
     };
 
+    const handleSkipToStart = () => {
+        handleSeek(0);
+    };
+
+    const handleSkipToEnd = () => {
+        if (duration > 0) handleSeek(duration);
+    };
+
     return (
-        <div className="bg-white/5 backdrop-blur-xl p-3 sm:p-4 rounded-lg border border-white/10 space-y-2 sm:space-y-3">
+        <div className="bg-white/5 backdrop-blur-xl p-3 sm:p-4 rounded-lg border border-white/10 space-y-2.5 sm:space-y-3">
             <div className="flex justify-between items-center gap-2">
                 <h3 className="text-sm sm:text-lg font-bold text-white whitespace-nowrap shrink-0">
                     클립 #{index + 1}
@@ -233,13 +248,25 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
                 </div>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-4">
-                <button onClick={togglePlayPause} className="p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 shrink-0">
-                    {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
-                </button>
-                <div className="hidden sm:block w-28 text-center font-mono text-sm text-gray-300 shrink-0">
-                    {formatTime(currentTime)} / {formatTime(duration)}
+            {/* Transport Controls */}
+            <div className="flex items-center gap-2 sm:gap-3">
+                <div className="flex items-center shrink-0">
+                    <button onClick={handleSkipToStart} className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors" title="처음으로">
+                        <SkipBackIcon className="w-4 h-4" />
+                    </button>
+                    <button onClick={togglePlayPause} className="p-2.5 mx-0.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20">
+                        {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
+                    </button>
+                    <button onClick={handleSkipToEnd} className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors" title="끝으로">
+                        <SkipForwardIcon className="w-4 h-4" />
+                    </button>
                 </div>
+
+                {/* Time Current */}
+                <span className="hidden sm:block text-xs font-mono text-gray-400 shrink-0 w-[5.5rem] text-right tabular-nums">{formatTime(currentTime)}</span>
+                <span className="sm:hidden text-[11px] font-mono text-gray-400 shrink-0 tabular-nums">{formatTimeShort(currentTime)}</span>
+
+                {/* Seekbar */}
                 <input
                     type="range"
                     min="0"
@@ -247,31 +274,44 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
                     step="0.01"
                     value={currentTime}
                     onChange={(e) => handleSeek(Number(e.target.value))}
-                    className="w-full min-w-0 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                    className="w-full min-w-0 h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer"
                 />
+
+                {/* Time Duration */}
+                <span className="hidden sm:block text-xs font-mono text-gray-400 shrink-0 w-[5.5rem] tabular-nums">{formatTime(duration)}</span>
+                <span className="sm:hidden text-[11px] font-mono text-gray-400 shrink-0 tabular-nums">{formatTimeShort(duration)}</span>
+
+                {/* Zoom */}
                 <div className="hidden sm:flex items-center gap-1 shrink-0">
-                    <button onClick={() => setZoom(z => Math.max(1, z / 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15" aria-label="파형 축소"><MinusIcon className="w-4 h-4" /></button>
-                    <button onClick={() => setZoom(z => Math.min(100, z * 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15" aria-label="파형 확대"><PlusIcon className="w-4 h-4" /></button>
+                    <button onClick={() => setZoom(z => Math.max(1, z / 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15 transition-colors" aria-label="파형 축소"><MinusIcon className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setZoom(z => Math.min(100, z * 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15 transition-colors" aria-label="파형 확대"><PlusIcon className="w-3.5 h-3.5" /></button>
                 </div>
                 <audio ref={audioRef} src={item.src} preload="auto"></audio>
             </div>
 
-            <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400 shrink-0">속도:</span>
-                <div className="flex items-center gap-1">
-                    {PLAYBACK_RATES.map(rate => (
-                        <button
-                            key={rate}
-                            onClick={() => handlePlaybackRateChange(rate)}
-                            className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                                playbackRate === rate
-                                    ? 'bg-indigo-600 text-white font-semibold'
-                                    : 'bg-white/10 text-gray-300 hover:bg-white/15'
-                            }`}
-                        >
-                            {rate}x
-                        </button>
-                    ))}
+            {/* Speed Controls */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-gray-500 shrink-0 uppercase tracking-wider font-medium">Speed</span>
+                    <div className="flex items-center gap-0.5">
+                        {PLAYBACK_RATES.map(rate => (
+                            <button
+                                key={rate}
+                                onClick={() => handlePlaybackRateChange(rate)}
+                                className={`px-2 py-0.5 text-xs rounded-full transition-colors ${
+                                    playbackRate === rate
+                                        ? 'bg-indigo-600 text-white font-semibold shadow-sm shadow-indigo-600/30'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/10'
+                                }`}
+                            >
+                                {rate}x
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="sm:hidden flex items-center gap-1 shrink-0">
+                    <button onClick={() => setZoom(z => Math.max(1, z / 1.5))} className="p-1 bg-white/10 rounded hover:bg-white/15 transition-colors" aria-label="파형 축소"><MinusIcon className="w-3 h-3" /></button>
+                    <button onClick={() => setZoom(z => Math.min(100, z * 1.5))} className="p-1 bg-white/10 rounded hover:bg-white/15 transition-colors" aria-label="파형 확대"><PlusIcon className="w-3 h-3" /></button>
                 </div>
             </div>
 
