@@ -48,6 +48,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
     srtLines, activeSrtLineId, setActiveSrtLineId
 }, ref) => {
     const audioRef = useRef<HTMLAudioElement>(null);
+    const hasPlayedRef = useRef(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -63,13 +64,23 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
     }, [srtLines]);
 
     const safePlay = (audio: HTMLAudioElement) => {
-        if (audio.readyState >= 2) {
+        const doPlay = () => {
+            // On first play after load, force seek to 0 to avoid blob URL buffering offset
+            if (!hasPlayedRef.current) {
+                audio.currentTime = 0;
+                hasPlayedRef.current = true;
+            }
             audio.play().catch(e => console.error("Audio play failed", e));
+        };
+        // HAVE_ENOUGH_DATA: enough data buffered to play without interruption
+        if (audio.readyState >= 4) {
+            doPlay();
         } else {
-            audio.load();
-            audio.addEventListener('canplay', () => {
-                audio.play().catch(e => console.error("Audio play failed", e));
-            }, { once: true });
+            // Wait until enough data is buffered, then play
+            audio.addEventListener('canplaythrough', doPlay, { once: true });
+            if (audio.readyState < 1) {
+                audio.load();
+            }
         }
     };
 
@@ -99,11 +110,15 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         }
     }));
 
-    // Force the browser to fully load the audio data on mount
+    // Force the browser to fully load the audio data on mount and reset position
     useEffect(() => {
         const audio = audioRef.current;
         if (audio) {
+            hasPlayedRef.current = false;
             audio.load();
+            audio.currentTime = 0;
+            setCurrentTime(0);
+            setIsPlaying(false);
         }
     }, [item.src]);
 
@@ -146,7 +161,8 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         const handleEnd = () => {
             setIsPlaying(false);
             setActiveSrtLineId(null);
-            setCurrentTime(0); // Optional: Reset to start
+            audio.currentTime = 0;
+            setCurrentTime(0);
         };
 
         const handlePlay = () => setIsPlaying(true);
@@ -229,21 +245,21 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
                     <button
                         onClick={onRegenerateSrt}
                         disabled={isLoading}
-                        className="flex items-center gap-1.5 bg-yellow-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-yellow-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors text-xs sm:text-sm"
+                        className="flex items-center gap-1 sm:gap-1.5 bg-yellow-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-yellow-700 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors text-[11px] sm:text-sm whitespace-nowrap"
                         title="자막 재생성"
                     >
-                        <RefreshIcon className="w-4 h-4 shrink-0" />
-                        <span className="hidden sm:inline">자막 재생성</span>
+                        <RefreshIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                        자막 재생성
                     </button>
                     {item.contextDuration > 0 && !item.isTrimmed && (
-                        <button onClick={onTrim} className="flex items-center gap-1.5 bg-cyan-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-cyan-700 transition-colors text-xs sm:text-sm">
-                            <ScissorsIcon className="w-4 h-4 shrink-0" />
-                            <span className="hidden sm:inline">앞부분 잘라내기</span>
+                        <button onClick={onTrim} className="flex items-center gap-1 sm:gap-1.5 bg-cyan-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-cyan-700 transition-colors text-[11px] sm:text-sm whitespace-nowrap">
+                            <ScissorsIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                            잘라내기
                         </button>
                     )}
-                    <button onClick={handleDownload} className="flex items-center gap-1.5 bg-green-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-green-700 transition-colors text-xs sm:text-sm">
-                        <DownloadIcon className="w-4 h-4 shrink-0" />
-                        <span className="hidden sm:inline">다운로드</span>
+                    <button onClick={handleDownload} className="flex items-center gap-1 sm:gap-1.5 bg-green-600 text-white font-semibold py-1.5 px-2 sm:py-2 sm:px-3 rounded-md hover:bg-green-700 transition-colors text-[11px] sm:text-sm whitespace-nowrap">
+                        <DownloadIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                        다운로드
                     </button>
                 </div>
             </div>
