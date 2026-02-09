@@ -1,8 +1,8 @@
-import React, { useMemo, useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useMemo, useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { DownloadIcon, ScissorsIcon, PlayIcon, PauseIcon, RefreshIcon, PlusIcon, MinusIcon, SkipBackIcon, SkipForwardIcon } from '../constants';
 import { AudioHistoryItem } from '../App';
 import { SrtLine } from '../types';
-import { parseSrt, srtTimeToMs } from './Header';
+import { srtTimeToMs } from './Header';
 import { Waveform } from './Waveform';
 
 interface AudioPlayerProps {
@@ -25,14 +25,11 @@ export interface AudioPlayerHandle {
 }
 
 const formatTime = (timeInSeconds: number) => {
-    if (isNaN(timeInSeconds) || timeInSeconds < 0) {
-        return '00:00:00,000';
-    }
+    if (isNaN(timeInSeconds) || timeInSeconds < 0) return '00:00:00,000';
     const hours = Math.floor(timeInSeconds / 3600);
     const minutes = Math.floor((timeInSeconds % 3600) / 60);
     const seconds = Math.floor(timeInSeconds % 60);
     const milliseconds = Math.floor((timeInSeconds * 1000) % 1000);
-
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
 };
 
@@ -43,18 +40,34 @@ const formatTimeShort = (timeInSeconds: number) => {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
+// Shared AudioContext (created once, reused)
+let sharedAudioContext: AudioContext | null = null;
+function getAudioContext(): AudioContext {
+    if (!sharedAudioContext || sharedAudioContext.state === 'closed') {
+        sharedAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (sharedAudioContext.state === 'suspended') {
+        sharedAudioContext.resume();
+    }
+    return sharedAudioContext;
+}
+
 export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
     item, index, isLoading, onTrim, onRegenerateSrt,
     srtLines, activeSrtLineId, setActiveSrtLineId
 }, ref) => {
-    const audioRef = useRef<HTMLAudioElement>(null);
-    const isLoadedRef = useRef(false);
+    const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+    const gainRef = useRef<GainNode | null>(null);
+    // When playback started (in AudioContext time)
+    const ctxStartTimeRef = useRef(0);
+    // Audio offset when playback started
+    const startOffsetRef = useRef(0);
+
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [zoom, setZoom] = useState(1);
     const [playbackRate, setPlaybackRate] = useState(1);
 
-    // Duration from AudioBuffer (reliable, no need to wait for audio element load)
     const duration = item.audioBuffer ? item.audioBuffer.duration : 0;
 
     const srtLinesWithSeconds = useMemo(() => {
@@ -65,121 +78,117 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         }));
     }, [srtLines]);
 
-    // Ensure audio element is loaded, then call callback
-    const ensureLoaded = (audio: HTMLAudioElement, callback: () => void) => {
-        if (isLoadedRef.current && audio.readyState >= 4) {
-            callback();
-        } else {
-            audio.addEventListener('canplaythrough', () => {
-                isLoadedRef.current = true;
-                callback();
-            }, { once: true });
-            audio.load();
+    const stopSource = useCallback(() => {
+        if (sourceRef.current) {
+            try { sourceRef.current.onended = null; sourceRef.current.stop(); } catch (_) {}
+            sourceRef.current.disconnect();
+            sourceRef.current = null;
         }
-    };
+    }, []);
+
+    const playFrom = useCallback((offset: number, rate: number) => {
+        if (!item.audioBuffer) return;
+        stopSource();
+
+        const ctx = getAudioContext();
+        const source = ctx.createBufferSource();
+        source.buffer = item.audioBuffer;
+        source.playbackRate.value = rate;
+
+        if (!gainRef.current) {
+            gainRef.current = ctx.createGain();
+            gainRef.current.connect(ctx.destination);
+        }
+        source.connect(gainRef.current);
+
+        const clampedOffset = Math.max(0, Math.min(offset, duration));
+        source.start(0, clampedOffset);
+
+        sourceRef.current = source;
+        ctxStartTimeRef.current = ctx.currentTime;
+        startOffsetRef.current = clampedOffset;
+        setIsPlaying(true);
+
+        source.onended = () => {
+            if (sourceRef.current === source) {
+                sourceRef.current = null;
+                setIsPlaying(false);
+                startOffsetRef.current = 0;
+                setCurrentTime(0);
+                setActiveSrtLineId(null);
+            }
+        };
+    }, [item.audioBuffer, duration, stopSource, setActiveSrtLineId]);
+
+    const pause = useCallback(() => {
+        if (!sourceRef.current) return;
+        const ctx = getAudioContext();
+        const elapsed = (ctx.currentTime - ctxStartTimeRef.current) * (sourceRef.current.playbackRate.value);
+        startOffsetRef.current = Math.min(startOffsetRef.current + elapsed, duration);
+        stopSource();
+        setIsPlaying(false);
+    }, [duration, stopSource]);
+
+    const seekTo = useCallback((time: number) => {
+        const clamped = Math.max(0, Math.min(time, duration));
+        startOffsetRef.current = clamped;
+        setCurrentTime(clamped);
+        if (isPlaying) {
+            playFrom(clamped, playbackRate);
+        }
+    }, [isPlaying, playbackRate, duration, playFrom]);
+
+    const togglePlayPause = useCallback(() => {
+        if (isPlaying) {
+            pause();
+        } else {
+            playFrom(startOffsetRef.current, playbackRate);
+        }
+    }, [isPlaying, playbackRate, playFrom, pause]);
 
     useImperativeHandle(ref, () => ({
-        seekTo: (time: number) => {
-            if (audioRef.current) {
-                ensureLoaded(audioRef.current, () => {
-                    audioRef.current!.currentTime = time;
-                    setCurrentTime(time);
-                });
-            }
-        },
-        play: () => {
-            if (audioRef.current) {
-                const audio = audioRef.current;
-                ensureLoaded(audio, () => {
-                    audio.play().catch(e => console.error("Audio play failed", e));
-                });
-            }
-        },
-        pause: () => {
-            if (audioRef.current) {
-                audioRef.current.pause();
-            }
-        },
-        togglePlay: () => {
-            if (audioRef.current) {
-                if (audioRef.current.paused) {
-                    const audio = audioRef.current;
-                    ensureLoaded(audio, () => {
-                        audio.play().catch(e => console.error("Audio play failed", e));
-                    });
-                } else {
-                    audioRef.current.pause();
-                }
-            }
-        }
+        seekTo,
+        play: () => playFrom(startOffsetRef.current, playbackRate),
+        pause,
+        togglePlay: togglePlayPause,
     }));
 
-    // Reset state when audio source changes (do NOT auto-load)
+    // Reset when audio source changes
     useEffect(() => {
-        isLoadedRef.current = false;
+        stopSource();
+        startOffsetRef.current = 0;
+        ctxStartTimeRef.current = 0;
         setCurrentTime(0);
         setIsPlaying(false);
-    }, [item.src]);
+    }, [item.audioBuffer, stopSource]);
 
-    // Smooth playback update using requestAnimationFrame
+    // Cleanup on unmount
     useEffect(() => {
-        let animationFrameId: number;
+        return () => { stopSource(); };
+    }, [stopSource]);
 
-        const updateLoop = () => {
-            if (audioRef.current && !audioRef.current.paused) {
-                const now = audioRef.current.currentTime;
+    // Smooth time update via rAF
+    useEffect(() => {
+        let animId: number;
+        const update = () => {
+            if (sourceRef.current) {
+                const ctx = getAudioContext();
+                const elapsed = (ctx.currentTime - ctxStartTimeRef.current) * (sourceRef.current.playbackRate.value);
+                const now = Math.min(startOffsetRef.current + elapsed, duration);
                 setCurrentTime(now);
 
                 const activeLine = srtLinesWithSeconds.find(
                     line => now >= line.startTimeSec && now < line.endTimeSec
                 );
                 setActiveSrtLineId(activeLine ? activeLine.id : null);
-
-                animationFrameId = requestAnimationFrame(updateLoop);
             }
+            animId = requestAnimationFrame(update);
         };
-
         if (isPlaying) {
-            animationFrameId = requestAnimationFrame(updateLoop);
+            animId = requestAnimationFrame(update);
         }
-
-        return () => {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-        };
-    }, [isPlaying, srtLinesWithSeconds, setActiveSrtLineId]);
-
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        const handleEnd = () => {
-            setIsPlaying(false);
-            setActiveSrtLineId(null);
-            audio.currentTime = 0;
-            setCurrentTime(0);
-        };
-
-        const handlePlay = () => setIsPlaying(true);
-        const handlePause = () => setIsPlaying(false);
-
-        const handleTimeUpdate = () => {
-            if (!isPlaying) {
-                 setCurrentTime(audio.currentTime);
-            }
-        };
-
-        audio.addEventListener('ended', handleEnd);
-        audio.addEventListener('play', handlePlay);
-        audio.addEventListener('pause', handlePause);
-        audio.addEventListener('timeupdate', handleTimeUpdate);
-
-        return () => {
-            audio.removeEventListener('ended', handleEnd);
-            audio.removeEventListener('play', handlePlay);
-            audio.removeEventListener('pause', handlePause);
-            audio.removeEventListener('timeupdate', handleTimeUpdate);
-        };
-    }, [isPlaying, setActiveSrtLineId]);
+        return () => { if (animId) cancelAnimationFrame(animId); };
+    }, [isPlaying, duration, srtLinesWithSeconds, setActiveSrtLineId]);
 
     const handleDownload = () => {
         const link = document.createElement('a');
@@ -190,44 +199,19 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         document.body.removeChild(link);
     };
 
-    const togglePlayPause = () => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        if (isPlaying) {
-            audio.pause();
-        } else {
-            ensureLoaded(audio, () => {
-                audio.playbackRate = playbackRate;
-                audio.play().catch(e => console.error("Audio play failed", e));
-            });
-        }
-    };
-
-    const handleSeek = (time: number) => {
-        const audio = audioRef.current;
-        if (!audio) return;
-        ensureLoaded(audio, () => {
-            audio.currentTime = time;
-            setCurrentTime(time);
-        });
-    };
-
     const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
     const handlePlaybackRateChange = (rate: number) => {
-        setPlaybackRate(rate);
-        if (audioRef.current) {
-            audioRef.current.playbackRate = rate;
+        if (isPlaying && sourceRef.current) {
+            // Recalculate offset before changing rate
+            const ctx = getAudioContext();
+            const elapsed = (ctx.currentTime - ctxStartTimeRef.current) * sourceRef.current.playbackRate.value;
+            const currentOffset = Math.min(startOffsetRef.current + elapsed, duration);
+            setPlaybackRate(rate);
+            playFrom(currentOffset, rate);
+        } else {
+            setPlaybackRate(rate);
         }
-    };
-
-    const handleSkipToStart = () => {
-        handleSeek(0);
-    };
-
-    const handleSkipToEnd = () => {
-        if (duration > 0) handleSeek(duration);
     };
 
     return (
@@ -262,42 +246,37 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
             {/* Transport Controls */}
             <div className="flex items-center gap-2 sm:gap-3">
                 <div className="flex items-center shrink-0">
-                    <button onClick={handleSkipToStart} className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors" title="처음으로">
+                    <button onClick={() => seekTo(0)} className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors" title="처음으로">
                         <SkipBackIcon className="w-4 h-4" />
                     </button>
                     <button onClick={togglePlayPause} className="p-2.5 mx-0.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/20">
                         {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
                     </button>
-                    <button onClick={handleSkipToEnd} className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors" title="끝으로">
+                    <button onClick={() => seekTo(duration)} className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition-colors" title="끝으로">
                         <SkipForwardIcon className="w-4 h-4" />
                     </button>
                 </div>
 
-                {/* Time Current */}
                 <span className="hidden sm:block text-xs font-mono text-gray-400 shrink-0 w-[5.5rem] text-right tabular-nums">{formatTime(currentTime)}</span>
                 <span className="sm:hidden text-[11px] font-mono text-gray-400 shrink-0 tabular-nums">{formatTimeShort(currentTime)}</span>
 
-                {/* Seekbar */}
                 <input
                     type="range"
                     min="0"
                     max={duration || 0}
                     step="0.01"
                     value={currentTime}
-                    onChange={(e) => handleSeek(Number(e.target.value))}
+                    onChange={(e) => seekTo(Number(e.target.value))}
                     className="w-full min-w-0 h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer"
                 />
 
-                {/* Time Duration */}
                 <span className="hidden sm:block text-xs font-mono text-gray-400 shrink-0 w-[5.5rem] tabular-nums">{formatTime(duration)}</span>
                 <span className="sm:hidden text-[11px] font-mono text-gray-400 shrink-0 tabular-nums">{formatTimeShort(duration)}</span>
 
-                {/* Zoom */}
                 <div className="hidden sm:flex items-center gap-1 shrink-0">
                     <button onClick={() => setZoom(z => Math.max(1, z / 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15 transition-colors" aria-label="파형 축소"><MinusIcon className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setZoom(z => Math.min(100, z * 1.5))} className="p-1.5 bg-white/10 rounded-md hover:bg-white/15 transition-colors" aria-label="파형 확대"><PlusIcon className="w-3.5 h-3.5" /></button>
                 </div>
-                <audio ref={audioRef} src={item.src} preload="none"></audio>
             </div>
 
             {/* Speed Controls */}
@@ -331,7 +310,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
                     audioBuffer={item.audioBuffer}
                     currentTime={currentTime}
                     duration={duration}
-                    onSeek={handleSeek}
+                    onSeek={seekTo}
                     srtLines={srtLines}
                     activeSrtLineId={activeSrtLineId}
                     zoom={zoom}
