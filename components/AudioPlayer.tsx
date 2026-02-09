@@ -65,18 +65,21 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
 
     const safePlay = (audio: HTMLAudioElement) => {
         const doPlay = () => {
-            // On first play after load, force seek to 0 to avoid blob URL buffering offset
-            if (!hasPlayedRef.current) {
-                audio.currentTime = 0;
-                hasPlayedRef.current = true;
-            }
             audio.play().catch(e => console.error("Audio play failed", e));
         };
-        // HAVE_ENOUGH_DATA: enough data buffered to play without interruption
+
+        if (!hasPlayedRef.current) {
+            // First play: fully reload to guarantee playback starts from 0.
+            // load() resets position to 0 and re-buffers the entire source.
+            hasPlayedRef.current = true;
+            audio.addEventListener('canplaythrough', doPlay, { once: true });
+            audio.load();
+            return;
+        }
+
         if (audio.readyState >= 4) {
             doPlay();
         } else {
-            // Wait until enough data is buffered, then play
             audio.addEventListener('canplaythrough', doPlay, { once: true });
             if (audio.readyState < 1) {
                 audio.load();
