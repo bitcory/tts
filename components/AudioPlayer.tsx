@@ -116,6 +116,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
                 setIsPlaying(false);
                 startOffsetRef.current = 0;
                 setCurrentTime(0);
+                waveformRef.current?.updatePlayhead(0);
                 setActiveSrtLineId(null);
             }
         };
@@ -125,15 +126,20 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(({
         if (!sourceRef.current) return;
         const ctx = getAudioContext();
         const elapsed = (ctx.currentTime - ctxStartTimeRef.current) * (sourceRef.current.playbackRate.value);
-        startOffsetRef.current = Math.min(startOffsetRef.current + elapsed, duration);
+        const pausedAt = Math.min(startOffsetRef.current + elapsed, duration);
+        startOffsetRef.current = pausedAt;
         stopSource();
         setIsPlaying(false);
+        setCurrentTime(pausedAt);
+        waveformRef.current?.updatePlayhead(pausedAt);
     }, [duration, stopSource]);
 
     const seekTo = useCallback((time: number) => {
         const clamped = Math.max(0, Math.min(time, duration));
         startOffsetRef.current = clamped;
         setCurrentTime(clamped);
+        // Update playhead immediately (bypasses React render delay)
+        waveformRef.current?.updatePlayhead(clamped);
         if (isPlaying) {
             playFrom(clamped, playbackRate);
         }

@@ -319,9 +319,10 @@ export const parseSrt = (srtContent: string): SrtLine[] => {
     return parsed;
 };
 
-export const adjustSrtGaps = (lines: SrtLine[]): SrtLine[] => {
-    if (lines.length < 2) return lines;
+export const adjustSrtGaps = (lines: SrtLine[], audioDurationSec?: number): SrtLine[] => {
+    if (lines.length === 0) return lines;
     const adjusted = lines.map(line => ({ ...line }));
+    // Adjust intermediate gaps
     for (let i = 0; i < adjusted.length - 1; i++) {
         const currentLine = adjusted[i];
         const nextLine = adjusted[i + 1];
@@ -333,6 +334,12 @@ export const adjustSrtGaps = (lines: SrtLine[]): SrtLine[] => {
                 currentLine.endTime = msToSrtTime(newEndTimeMs);
             }
         }
+    }
+    // Clamp last line's end time to actual audio duration
+    if (audioDurationSec != null && adjusted.length > 0) {
+        const lastLine = adjusted[adjusted.length - 1];
+        const audioDurationMs = Math.floor(audioDurationSec * 1000);
+        lastLine.endTime = msToSrtTime(audioDurationMs);
     }
     return adjusted;
 };

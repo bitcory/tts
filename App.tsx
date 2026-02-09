@@ -365,7 +365,7 @@ export function App() {
             const srt = await transcribeAudioWithSrt(wavBase64, srtSplitCharCount, abortControllerRef.current.signal, fullText);
 
             const parsedSrt = parseSrt(srt);
-            const adjustedSrt = adjustSrtGaps(parsedSrt);
+            const adjustedSrt = adjustSrtGaps(parsedSrt, audioBuffer.duration);
 
             const newItem: AudioHistoryItem = {
                 id: `audio-${Date.now()}`,
@@ -424,7 +424,7 @@ export function App() {
             const wavBase64 = await audioBufferToWavBase64(targetItem.audioBuffer);
             const srt = await transcribeAudioWithSrt(wavBase64, srtSplitCharCount, abortControllerRef.current.signal, targetItem.scriptChunk);
             const parsedSrt = parseSrt(srt);
-            const adjustedSrt = adjustSrtGaps(parsedSrt);
+            const adjustedSrt = adjustSrtGaps(parsedSrt, targetItem.audioBuffer.duration);
 
             setTtsResult(prev => ({
                 ...prev,

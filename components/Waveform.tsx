@@ -152,8 +152,13 @@ export const Waveform = forwardRef<WaveformHandle, WaveformProps>(({ audioBuffer
 
     }, [peakData, duration, zoom, srtLines, activeSrtLineId]);
 
+    // Track last drawn time so we can restore playhead after static redraws
+    const lastTimeRef = useRef(0);
+
     // Lightweight playhead-only draw — called directly from rAF in AudioPlayer
     const updatePlayhead = useCallback((time: number) => {
+        lastTimeRef.current = time;
+
         const playheadCanvas = playheadCanvasRef.current;
         const container = containerRef.current;
         if (!playheadCanvas || !container || duration === 0) return;
@@ -184,21 +189,21 @@ export const Waveform = forwardRef<WaveformHandle, WaveformProps>(({ audioBuffer
         updatePlayhead,
     }), [updatePlayhead]);
 
-    // Draw static content when dependencies change
+    // Draw static content when dependencies change (NOT on currentTime changes)
     useEffect(() => {
         drawStatic();
-        // Also draw playhead at current position after static redraw
-        updatePlayhead(currentTime);
+        // Restore playhead at last known position after static redraw
+        updatePlayhead(lastTimeRef.current);
 
         const container = containerRef.current;
         if (!container) return;
         const resizeObserver = new ResizeObserver(() => {
             drawStatic();
-            updatePlayhead(currentTime);
+            updatePlayhead(lastTimeRef.current);
         });
         resizeObserver.observe(container);
         return () => resizeObserver.disconnect();
-    }, [drawStatic, updatePlayhead, currentTime]);
+    }, [drawStatic, updatePlayhead]);
 
     const handleWheel = (e: React.WheelEvent) => {
         e.preventDefault();

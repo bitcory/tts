@@ -307,7 +307,7 @@ export const SubtitleGenerator: React.FC = () => {
             if (signal.aborted) throw new Error('Aborted');
             
             const parsed = parseSrt(srtFromApi);
-            const adjusted = adjustSrtGaps(parsed);
+            const adjusted = adjustSrtGaps(parsed, buffer.duration);
 
             setSrtLines(adjusted);
             setOriginalSrtLines(JSON.parse(JSON.stringify(adjusted))); // Deep copy for original state
