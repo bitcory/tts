@@ -829,18 +829,18 @@ export function App() {
                         </button>
                     </div>
 
-                    <div className="flex items-center justify-center gap-3 pt-2">
+                    <div className="flex items-center justify-center pt-2">
                         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white whitespace-nowrap">
                             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400">TB TTS STUDIO</span>
                         </h1>
-                        <button
-                            onClick={handleOpenApiKeyModal}
-                            className={`md:hidden p-2 rounded-full border transition-colors ${isApiKeySet ? 'border-green-600 bg-green-600/10' : 'border-red-600 bg-red-600/10'}`}
-                            title="API 키 설정"
-                        >
-                            <KeyIcon className={`w-4 h-4 ${isApiKeySet ? 'text-green-400' : 'text-red-400'}`} />
-                        </button>
                     </div>
+                    <button
+                        onClick={handleOpenApiKeyModal}
+                        className={`md:hidden absolute top-3 right-0 p-1.5 rounded-full border transition-colors ${isApiKeySet ? 'border-green-600/60 bg-green-600/10' : 'border-red-600/60 bg-red-600/10'}`}
+                        title="API 키 설정"
+                    >
+                        <KeyIcon className={`w-3.5 h-3.5 ${isApiKeySet ? 'text-green-400' : 'text-red-400'}`} />
+                    </button>
                 </header>
 
                 <MainContent
