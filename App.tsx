@@ -310,15 +310,21 @@ export function App() {
 
         setIsPreviewLoading(prev => ({ ...prev, [voiceId]: true }));
         try {
-            const base64Pcm = await previewVoice(voiceId);
-            const blob = createWavBlobFromBase64Pcm(base64Pcm);
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audio.onended = () => URL.revokeObjectURL(url);
+            const audio = new Audio(`/previews/${voiceId}.wav`);
             await audio.play();
         } catch (e) {
-            console.error("Preview failed", e);
-            alert("음성 미리듣기에 실패했습니다.");
+            // Fallback to API if local file fails
+            try {
+                const base64Pcm = await previewVoice(voiceId);
+                const blob = createWavBlobFromBase64Pcm(base64Pcm);
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                audio.onended = () => URL.revokeObjectURL(url);
+                await audio.play();
+            } catch (e2) {
+                console.error("Preview failed", e2);
+                alert("음성 미리듣기에 실패했습니다.");
+            }
         } finally {
             setIsPreviewLoading(prev => ({ ...prev, [voiceId]: false }));
         }
